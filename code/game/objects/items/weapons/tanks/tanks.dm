@@ -10,6 +10,7 @@ var/list/global/tank_gauge_cache = list()
 
 	var/gauge_icon = "indicator_tank"
 	var/gauge_cap = 6
+	var/previous_gauge_pressure = null
 
 	obj_flags = OBJ_FLAG_CONDUCTIBLE
 	slot_flags = SLOT_BACK
@@ -340,8 +341,28 @@ var/list/global/tank_gauge_cache = list()
 	update_icon()
 	check_status()
 
-/obj/item/weapon/tank/update_icon()
-	overlays.Cut()
+/obj/item/weapon/tank/update_icon(var/override)
+	var/needs_updating = override
+	
+	if(istype(loc, /obj/) && !istype(loc, /obj/item/clothing/suit/) && !override) //So we don't eat up our tick. Every tick, when we're not actually in play.
+		return
+
+	var/gauge_pressure = 0
+	if(air_contents)
+		gauge_pressure = air_contents.return_pressure()
+		if(gauge_pressure > TANK_IDEAL_PRESSURE)
+			gauge_pressure = -1
+		else
+			gauge_pressure = round((gauge_pressure/TANK_IDEAL_PRESSURE)*gauge_cap)
+	if (previous_gauge_pressure != gauge_pressure)
+		needs_updating = 1
+	
+	previous_gauge_pressure = gauge_pressure
+	if (!needs_updating)
+		return
+
+	overlays.Cut() // Each time you modify this, the object is redrawn. Cunts.
+	
 	if(proxyassembly.assembly || wired)
 		overlays += image(icon,"bomb_assembly")
 		if(proxyassembly.assembly)
@@ -354,14 +375,6 @@ var/list/global/tank_gauge_cache = list()
 	if(!gauge_icon)
 		return
 
-	var/gauge_pressure = 0
-	if(air_contents)
-		gauge_pressure = air_contents.return_pressure()
-		if(gauge_pressure > TANK_IDEAL_PRESSURE)
-			gauge_pressure = -1
-		else
-			gauge_pressure = round((gauge_pressure/TANK_IDEAL_PRESSURE)*gauge_cap)
-	
 	var/indicator = "[gauge_icon][(gauge_pressure == -1) ? "overload" : gauge_pressure]"
 	if(!tank_gauge_cache[indicator])
 		tank_gauge_cache[indicator] = image(icon, indicator)
@@ -548,21 +561,6 @@ var/list/global/tank_gauge_cache = list()
 	update_icon()
 
 /obj/item/weapon/tank/proc/ignite()	//This happens when a bomb is told to explode
-	var/obj/item/device/assembly_holder/assy = proxyassembly.assembly
-	var/ign = assy.a_right
-	var/obj/item/other = assy.a_left
-
-	if (isigniter(assy.a_left))
-		ign = assy.a_left
-		other = assy.a_right
-
-	other.dropInto(get_turf(src))
-	qdel(ign)
-	assy.master = null
-	proxyassembly.assembly = null
-	qdel(assy)
-	update_icon()
-
 	air_contents.add_thermal_energy(15000)
 
 /obj/item/device/tankassemblyproxy/update_icon()
